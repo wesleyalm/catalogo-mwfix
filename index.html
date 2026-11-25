@@ -1,0 +1,297 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MWfix | Catálogo 3D</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #101010;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+        }
+
+        header {
+            padding: 40px 20px 25px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 52px;
+            font-weight: 900;
+            letter-spacing: -3px;
+        }
+
+        .logo span {
+            color: #00e58a;
+        }
+
+        .subtitulo {
+            color: #999;
+            font-size: 14px;
+            margin-top: 8px;
+            letter-spacing: 3px;
+        }
+
+        .pesquisa {
+            display: flex;
+            max-width: 650px;
+            margin: 30px auto;
+            padding: 0 16px;
+            gap: 10px;
+        }
+
+        input {
+            flex: 1;
+            min-width: 0;
+            padding: 17px;
+            background: #202020;
+            border: 1px solid #383838;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #00e58a;
+        }
+
+        button {
+            background: #00e58a;
+            color: #101010;
+            border: none;
+            padding: 16px 22px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #00bf73;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        #status {
+            text-align: center;
+            color: #aaa;
+            margin: 20px;
+            font-size: 14px;
+        }
+
+        #resultados {
+            display: grid;
+            grid-template-columns: repeat(
+                auto-fill, minmax(180px, 1fr)
+            );
+            gap: 15px;
+            max-width: 1400px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .produto {
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #202020;
+        }
+
+        .produto img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        @media (max-width: 600px) {
+            #resultados {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                padding: 12px;
+            }
+
+            .logo {
+                font-size: 44px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">MW<span>fix</span></div>
+        <div class="subtitulo">CATÁLOGO 3D</div>
+    </header>
+
+    <form class="pesquisa" id="formPesquisa">
+
+        <input
+            type="search"
+            id="busca"
+            placeholder="O que você procura?"
+            autocomplete="off"
+            required
+        >
+
+        <button id="botao" type="submit">
+            Pesquisar
+        </button>
+
+    </form>
+
+    <div id="status">
+        Pesquise para encontrar modelos.
+    </div>
+
+    <main id="resultados"></main>
+
+    <script>
+
+        const formulario = document.getElementById("formPesquisa");
+        const campoBusca = document.getElementById("busca");
+        const resultados = document.getElementById("resultados");
+        const status = document.getElementById("status");
+        const botao = document.getElementById("botao");
+
+        formulario.addEventListener("submit", function(evento) {
+            evento.preventDefault();
+            pesquisar();
+        });
+
+        async function pesquisar() {
+
+            const termo = campoBusca.value.trim();
+
+            if (!termo) return;
+
+            resultados.replaceChildren();
+            status.textContent = "Pesquisando modelos...";
+            botao.disabled = true;
+
+            const url = new URL(
+                "https://api.bambulab.com/v1/search-service/select/design2"
+            );
+
+            url.searchParams.set("keyword", termo);
+            url.searchParams.set("orderBy", "score");
+            url.searchParams.set("offset", "0");
+            url.searchParams.set("limit", "20");
+            url.searchParams.set("designType", "0");
+            url.searchParams.set("isFromSearchList", "false");
+
+            try {
+
+                const resposta = await fetch(url, {
+                    method: "GET",
+                    headers: {
+                        "Accept": "application/json",
+                        "x-bbl-app-source": "makerworld"
+                    }
+                });
+
+                if (!resposta.ok) {
+                    throw new Error(
+                        "Erro HTTP " + resposta.status
+                    );
+                }
+
+                const dados = await resposta.json();
+
+                const modelos =
+                    dados.hits ||
+                    dados.data?.hits ||
+                    dados.models;
+
+                if (!Array.isArray(modelos)) {
+                    throw new Error(
+                        "Formato de resposta inesperado."
+                    );
+                }
+
+                let quantidade = 0;
+
+                modelos.forEach(modelo => {
+
+                    if (modelo.nsfw) return;
+
+                    const capa =
+                        modelo.coverUrl ||
+                        modelo.cover;
+
+                    if (typeof capa !== "string") return;
+
+                    let endereco;
+
+                    try {
+                        endereco = new URL(capa);
+                    } catch {
+                        return;
+                    }
+
+                    if (endereco.protocol !== "https:") return;
+
+                    const card = document.createElement("div");
+                    card.className = "produto";
+
+                    const imagem = document.createElement("img");
+                    imagem.src = endereco.href;
+                    imagem.alt = "Modelo 3D";
+                    imagem.loading = "lazy";
+
+                    card.dataset.modeloId = modelo.id || "";
+
+                    imagem.addEventListener("error", () => {
+                        card.remove();
+                        quantidade--;
+                        status.textContent =
+                            quantidade + " modelos encontrados.";
+                    });
+
+                    card.appendChild(imagem);
+                    resultados.appendChild(card);
+
+                    quantidade++;
+
+                });
+
+                status.textContent = quantidade
+                    ? quantidade + " modelos encontrados."
+                    : "Nenhum modelo com imagem encontrado.";
+
+            } catch (erro) {
+
+                console.error(erro);
+
+                status.textContent =
+                    "Não foi possível conectar ao catálogo. " +
+                    erro.message;
+
+            } finally {
+
+                botao.disabled = false;
+
+            }
+
+        }
+
+    </script>
+
+</body>
+</html>
