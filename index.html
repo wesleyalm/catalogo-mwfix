@@ -1,13 +1,18 @@
 
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
 
     <title>MWfix | Catálogo</title>
 
     <style>
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -83,11 +88,6 @@
             background: #e65c00;
         }
 
-        button:disabled {
-            opacity: 0.5;
-            cursor: wait;
-        }
-
         #status {
             text-align: center;
             color: #aaa;
@@ -126,7 +126,53 @@
             transform: scale(1.04);
         }
 
+        #carregamento {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            padding: 30px;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #333;
+            border-top-color: #ff6600;
+            border-radius: 50%;
+            animation: girar 0.8s linear infinite;
+        }
+
+        @keyframes girar {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #fim {
+            color: #888;
+            text-align: center;
+            padding: 20px;
+            font-size: 14px;
+        }
+
+        #tentarNovamente {
+            display: block;
+            margin: 15px auto;
+        }
+
+        #tentarNovamente[hidden] {
+            display: none;
+        }
+
+        #sentinela {
+            height: 10px;
+        }
+
         @media (max-width: 600px) {
+
             #resultados {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 10px;
@@ -140,15 +186,23 @@
             button {
                 padding: 14px;
             }
+
         }
+
     </style>
+
 </head>
 
 <body>
 
     <header>
+
         <div class="logo">MW<span>fix</span></div>
-        <div class="subtitulo">CATÁLOGO DE PRODUTOS</div>
+
+        <div class="subtitulo">
+            CATÁLOGO DE PRODUTOS
+        </div>
+
     </header>
 
     <form class="pesquisa" id="formPesquisa">
@@ -161,7 +215,7 @@
             required
         >
 
-        <button id="botao" type="submit">
+        <button type="submit">
             Pesquisar
         </button>
 
@@ -173,46 +227,173 @@
 
     <main id="resultados"></main>
 
+    <div id="carregamento">
+
+        <div class="spinner"></div>
+
+        <span>Carregando modelos...</span>
+
+    </div>
+
+    <div id="fim"></div>
+
+    <button id="tentarNovamente" hidden>
+        Tentar novamente
+    </button>
+
+    <div id="sentinela"></div>
+
     <script>
 
-        const formulario = document.getElementById("formPesquisa");
-        const campoBusca = document.getElementById("busca");
-        const resultados = document.getElementById("resultados");
-        const status = document.getElementById("status");
-        const botao = document.getElementById("botao");
+        const API =
+            "https://delicate-queen-fb8c.wesley-almeida12345.workers.dev/";
 
-        const API = "https://delicate-queen-fb8c.wesley-almeida12345.workers.dev/";
+        const formulario =
+            document.getElementById("formPesquisa");
 
-        formulario.addEventListener("submit", function(evento) {
+        const campoBusca =
+            document.getElementById("busca");
+
+        const resultados =
+            document.getElementById("resultados");
+
+        const status =
+            document.getElementById("status");
+
+        const carregamento =
+            document.getElementById("carregamento");
+
+        const sentinela =
+            document.getElementById("sentinela");
+
+        const fim =
+            document.getElementById("fim");
+
+        const tentarNovamente =
+            document.getElementById("tentarNovamente");
+
+        let termoAtual = "";
+
+        let offset = 0;
+
+        let total = null;
+
+        let carregando = false;
+
+        let acabou = true;
+
+        let falhou = false;
+
+        let controlador = null;
+
+        let versaoPesquisa = 0;
+
+        const modelosExibidos = new Set();
+
+        function atualizarStatus() {
+
+            const quantidade = resultados.children.length;
+
+            if (total !== null) {
+
+                status.textContent =
+                    "Exibindo " +
+                    quantidade.toLocaleString("pt-BR") +
+                    " de " +
+                    total.toLocaleString("pt-BR") +
+                    " modelos encontrados.";
+
+            } else {
+
+                status.textContent =
+                    quantidade + " modelos exibidos.";
+
+            }
+
+        }
+
+        formulario.addEventListener("submit", evento => {
+
             evento.preventDefault();
-            pesquisar();
-        });
-
-        async function pesquisar() {
 
             const termo = campoBusca.value.trim();
 
-            if (!termo || botao.disabled) return;
+            if (!termo) return;
+
+            if (controlador) {
+                controlador.abort();
+            }
+
+            versaoPesquisa++;
+
+            termoAtual = termo;
+
+            offset = 0;
+
+            total = null;
+
+            carregando = false;
+
+            acabou = false;
+
+            falhou = false;
+
+            modelosExibidos.clear();
 
             resultados.replaceChildren();
+
+            fim.textContent = "";
+
+            tentarNovamente.hidden = true;
+
             status.textContent = "Pesquisando modelos...";
-            botao.disabled = true;
+
+            carregarMais();
+
+        });
+
+        async function carregarMais() {
+
+            if (
+                carregando ||
+                acabou ||
+                falhou ||
+                !termoAtual
+            ) return;
+
+            const versao = versaoPesquisa;
+
+            controlador = new AbortController();
+
+            carregando = true;
+
+            carregamento.style.display = "flex";
+
+            tentarNovamente.hidden = true;
 
             const url = new URL(API);
 
-            url.searchParams.set("q", termo);
+            url.searchParams.set("q", termoAtual);
+
+            url.searchParams.set("offset", String(offset));
 
             try {
 
-                const resposta = await fetch(url);
+                const resposta = await fetch(url, {
+                    signal: controlador.signal
+                });
 
                 if (!resposta.ok) {
+
                     throw new Error(
                         "Erro HTTP " + resposta.status
                     );
+
                 }
 
                 const dados = await resposta.json();
+
+                if (versao !== versaoPesquisa) return;
 
                 const modelos =
                     dados.hits ||
@@ -220,20 +401,57 @@
                     dados.models;
 
                 if (!Array.isArray(modelos)) {
+
                     throw new Error(
                         "Formato de resposta inesperado."
                     );
+
                 }
 
-                let quantidade = 0;
+                const totalRecebido =
+                    Number(dados.total ?? dados.data?.total);
 
-                function atualizarStatus() {
-                    status.textContent = quantidade
-                        ? quantidade + " modelos encontrados."
-                        : "Nenhum modelo com imagem encontrado.";
+                if (
+                    Number.isFinite(totalRecebido) &&
+                    totalRecebido >= 0
+                ) {
+
+                    total = totalRecebido;
+
                 }
+
+                if (modelos.length === 0) {
+
+                    acabou = true;
+
+                    fim.textContent = offset === 0
+                        ? "Nenhum modelo encontrado."
+                        : "Você chegou ao final dos resultados.";
+
+                    atualizarStatus();
+
+                    return;
+
+                }
+
+                let novosModelos = 0;
 
                 modelos.forEach(modelo => {
+
+                    const chave = String(
+                        modelo.id ??
+                        modelo.slug ??
+                        modelo.cover ??
+                        ""
+                    );
+
+                    if (!chave) return;
+
+                    if (modelosExibidos.has(chave)) return;
+
+                    modelosExibidos.add(chave);
+
+                    novosModelos++;
 
                     if (modelo.nsfw) return;
 
@@ -246,61 +464,165 @@
                     let endereco;
 
                     try {
+
                         endereco = new URL(capa);
+
                     } catch {
+
+                        return;
+
+                    }
+
+                    if (endereco.protocol !== "https:") {
                         return;
                     }
 
-                    if (endereco.protocol !== "https:") return;
-
-                    const card = document.createElement("div");
+                    const card =
+                        document.createElement("div");
 
                     card.className = "produto";
-                    card.dataset.modeloId = modelo.id || "";
-                    card.dataset.slug = modelo.slug || "";
 
-                    const imagem = document.createElement("img");
+                    card.dataset.modeloId =
+                        modelo.id || "";
+
+                    card.dataset.slug =
+                        modelo.slug || "";
+
+                    const imagem =
+                        document.createElement("img");
 
                     imagem.alt = "Foto do modelo";
+
                     imagem.loading = "lazy";
+
                     imagem.decoding = "async";
 
                     imagem.addEventListener("error", () => {
 
+                        if (versao !== versaoPesquisa) {
+                            return;
+                        }
+
                         card.remove();
-                        quantidade--;
+
                         atualizarStatus();
 
                     }, { once: true });
 
                     card.appendChild(imagem);
-                    resultados.appendChild(card);
 
-                    quantidade++;
+                    resultados.appendChild(card);
 
                     imagem.src = endereco.href;
 
                 });
 
+                offset += modelos.length;
+
                 atualizarStatus();
+
+                if (
+                    modelos.length < 20 ||
+                    (total !== null && offset >= total)
+                ) {
+
+                    acabou = true;
+
+                    fim.textContent =
+                        "Você chegou ao final dos resultados.";
+
+                } else if (novosModelos === 0) {
+
+                    acabou = true;
+
+                    fim.textContent =
+                        "Não há novos resultados disponíveis.";
+
+                }
 
             } catch (erro) {
 
+                if (versao !== versaoPesquisa) return;
+
+                if (erro.name === "AbortError") return;
+
                 console.error(erro);
 
-                status.textContent =
-                    "Não foi possível conectar ao catálogo. " +
+                falhou = true;
+
+                fim.textContent =
+                    "Não foi possível carregar os modelos. " +
                     erro.message;
+
+                tentarNovamente.hidden = false;
 
             } finally {
 
-                botao.disabled = false;
+                if (versao === versaoPesquisa) {
+
+                    carregando = false;
+
+                    carregamento.style.display = "none";
+
+                    if (!acabou && !falhou) {
+
+                        requestAnimationFrame(
+                            verificarRolagem
+                        );
+
+                    }
+
+                }
 
             }
 
         }
 
+        function verificarRolagem() {
+
+            const posicao =
+                sentinela.getBoundingClientRect().top;
+
+            if (posicao < window.innerHeight + 400) {
+
+                carregarMais();
+
+            }
+
+        }
+
+        const observador = new IntersectionObserver(
+
+            entradas => {
+
+                if (entradas[0].isIntersecting) {
+
+                    carregarMais();
+
+                }
+
+            },
+
+            {
+                rootMargin: "400px"
+            }
+
+        );
+
+        observador.observe(sentinela);
+
+        tentarNovamente.addEventListener("click", () => {
+
+            falhou = false;
+
+            fim.textContent = "";
+
+            carregarMais();
+
+        });
+
     </script>
 
 </body>
+
 </html>
