@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>MWfix | Catálogo 3D</title>
+    <title>MWfix | Catálogo</title>
 
     <style>
         * {
@@ -33,7 +33,7 @@
         }
 
         .logo span {
-            color: #00e58a;
+            color: #ff6600;
         }
 
         .subtitulo {
@@ -64,22 +64,23 @@
         }
 
         input:focus {
-            border-color: #00e58a;
+            border-color: #ff6600;
         }
 
         button {
-            background: #00e58a;
-            color: #101010;
+            background: #ff6600;
+            color: white;
             border: none;
             padding: 16px 22px;
             border-radius: 12px;
             font-size: 15px;
             font-weight: bold;
             cursor: pointer;
+            transition: 0.2s;
         }
 
         button:hover {
-            background: #00bf73;
+            background: #e65c00;
         }
 
         button:disabled {
@@ -110,6 +111,7 @@
             overflow: hidden;
             border-radius: 12px;
             background: #202020;
+            border: 1px solid #292929;
         }
 
         .produto img {
@@ -117,6 +119,11 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transition: transform 0.2s;
+        }
+
+        .produto:hover img {
+            transform: scale(1.04);
         }
 
         @media (max-width: 600px) {
@@ -129,6 +136,10 @@
             .logo {
                 font-size: 44px;
             }
+
+            button {
+                padding: 14px;
+            }
         }
     </style>
 </head>
@@ -137,7 +148,7 @@
 
     <header>
         <div class="logo">MW<span>fix</span></div>
-        <div class="subtitulo">CATÁLOGO 3D</div>
+        <div class="subtitulo">CATÁLOGO DE PRODUTOS</div>
     </header>
 
     <form class="pesquisa" id="formPesquisa">
@@ -156,7 +167,7 @@
 
     </form>
 
-    <div id="status">
+    <div id="status" aria-live="polite">
         Pesquise para encontrar modelos.
     </div>
 
@@ -170,6 +181,8 @@
         const status = document.getElementById("status");
         const botao = document.getElementById("botao");
 
+        const API = "https://delicate-queen-fb8c.wesley-almeida12345.workers.dev/";
+
         formulario.addEventListener("submit", function(evento) {
             evento.preventDefault();
             pesquisar();
@@ -179,32 +192,19 @@
 
             const termo = campoBusca.value.trim();
 
-            if (!termo) return;
+            if (!termo || botao.disabled) return;
 
             resultados.replaceChildren();
             status.textContent = "Pesquisando modelos...";
             botao.disabled = true;
 
-            const url = new URL(
-                "https://api.bambulab.com/v1/search-service/select/design2"
-            );
+            const url = new URL(API);
 
-            url.searchParams.set("keyword", termo);
-            url.searchParams.set("orderBy", "score");
-            url.searchParams.set("offset", "0");
-            url.searchParams.set("limit", "20");
-            url.searchParams.set("designType", "0");
-            url.searchParams.set("isFromSearchList", "false");
+            url.searchParams.set("q", termo);
 
             try {
 
-                const resposta = await fetch(url, {
-                    method: "GET",
-                    headers: {
-                        "Accept": "application/json",
-                        "x-bbl-app-source": "makerworld"
-                    }
-                });
+                const resposta = await fetch(url);
 
                 if (!resposta.ok) {
                     throw new Error(
@@ -227,13 +227,19 @@
 
                 let quantidade = 0;
 
+                function atualizarStatus() {
+                    status.textContent = quantidade
+                        ? quantidade + " modelos encontrados."
+                        : "Nenhum modelo com imagem encontrado.";
+                }
+
                 modelos.forEach(modelo => {
 
                     if (modelo.nsfw) return;
 
                     const capa =
-                        modelo.coverUrl ||
-                        modelo.cover;
+                        modelo.cover ||
+                        modelo.coverUrl;
 
                     if (typeof capa !== "string") return;
 
@@ -248,32 +254,35 @@
                     if (endereco.protocol !== "https:") return;
 
                     const card = document.createElement("div");
+
                     card.className = "produto";
+                    card.dataset.modeloId = modelo.id || "";
+                    card.dataset.slug = modelo.slug || "";
 
                     const imagem = document.createElement("img");
-                    imagem.src = endereco.href;
-                    imagem.alt = "Modelo 3D";
-                    imagem.loading = "lazy";
 
-                    card.dataset.modeloId = modelo.id || "";
+                    imagem.alt = "Foto do modelo";
+                    imagem.loading = "lazy";
+                    imagem.decoding = "async";
 
                     imagem.addEventListener("error", () => {
+
                         card.remove();
                         quantidade--;
-                        status.textContent =
-                            quantidade + " modelos encontrados.";
-                    });
+                        atualizarStatus();
+
+                    }, { once: true });
 
                     card.appendChild(imagem);
                     resultados.appendChild(card);
 
                     quantidade++;
 
+                    imagem.src = endereco.href;
+
                 });
 
-                status.textContent = quantidade
-                    ? quantidade + " modelos encontrados."
-                    : "Nenhum modelo com imagem encontrado.";
+                atualizarStatus();
 
             } catch (erro) {
 
